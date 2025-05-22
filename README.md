@@ -4,14 +4,16 @@ GO!비서는 텔레그램 대화 내용을 바탕으로 **약속 시간과 장�
 
 ## 📁 프로젝트 구조
 
-DEV/
-├── .gitignore # Git 무시 파일 설정
-├── README.md # 프로젝트 설명서 (본 파일)
-├── gpt.py # GPT 기반 자연어 분석 유틸
-├── main.py # FastAPI 서버 진입점
-├── model.py # NER 및 intent 분석 모듈
-├── naver_api.py # 네이버 지도 API 연동
-├── telegram_bot.py # 텔레그램 챗봇 본체
+| 파일명           | 설명                             |
+|------------------|----------------------------------|
+| `.gitignore`     | Git 무시 파일 설정               |
+| `README.md`      | 프로젝트 설명서                  |
+| `gpt.py`         | GPT 기반 자연어 분석 유틸       |
+| `main.py`        | FastAPI 서버 진입점              |
+| `model.py`       | NER 및 intent 분석 모듈          |
+| `naver_api.py`   | 네이버 지도 API 연동             |
+| `telegram_bot.py`| 텔레그램 챗봇 메인 로직          |
+
 
 
 ## 💡 주요 기능
