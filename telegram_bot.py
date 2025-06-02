@@ -115,7 +115,7 @@ async def analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❗ 장소 정보가 부족합니다.")
         return
 
-    keyword = Counter(locs).most_common(1)[0][0] + " 조용한 카페"
+    keyword = Counter(locs).most_common(1)[0][0]
     places = search_places(keyword)
 
     if places:
