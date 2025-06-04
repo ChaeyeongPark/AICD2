@@ -6,90 +6,91 @@ from datetime import datetime, timedelta
 
 # 🔐 환경변수 로드
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-class GPTAnalysisError(Exception):
-    """GPT 분석 중 발생하는 에러를 처리하기 위한 커스텀 예외"""
-    pass
-
-def analyze_dialogue(dialogue_texts: list[str]) -> dict:
-    if not dialogue_texts:
-        raise GPTAnalysisError("분석할 대화 내용이 없습니다.")
-    
-    if not openai.api_key:
-        raise GPTAnalysisError("OpenAI API 키가 설정되지 않았습니다.")
-
-    # 현재 날짜 가져오기
-    current_date = datetime.now()
-    current_date_str = current_date.strftime("%Y년 %m월 %d일")
-    
-    # 다음 주 목요일 날짜 계산
-    days_until_next_thursday = (3 - current_date.weekday()) % 7 + 7  # 현재 요일이 목요일이면 7일 후
-    next_thursday = current_date + timedelta(days=days_until_next_thursday)
-    next_thursday_str = next_thursday.strftime("%Y년 %m월 %d일")
+def analyze_dialogue(dialogue_texts: list[str], base_date: datetime = None, model_name: str = "gpt-4") -> dict:
+    today = base_date if base_date else datetime.now()
     
     prompt = (
-        f"현재 날짜는 {current_date_str}입니다. 다음은 사람들이 나눈 단체 대화입니다. 이 대화를 바탕으로 아래 정보를 추출해 주세요:\n\n"
-        "1. 시간 분석:\n"
-        "   - 모든 인원이 가능한 공통 시간이 있으면 그 시간을 추출\n"
-        "   - 모든 인원이 가능한 시간이 없다면, 최대 인원이 가능한 시간을 추천하고 불참자 명단 작성\n"
-        "   - 시간 추출 규칙:\n"
-        "     * 최종 결정된 시간을 추출 (예: '~시로 하자', '~시에 만나자', '~시 시작')\n"
-        "     * 시간 제약조건은 무시 (예: '~시까지 가능', '~시부터 가능', '~시 전에 나가야')\n"
-        "     * 여러 시간이 언급되면, 가장 최근에 결정된 시간을 사용\n"
-        "     * 시간은 24시간 형식으로 변환\n\n"
-        "2. 장소 분석:\n"
-        "   - 최종적으로 결정된 장소 추출\n"
-        "   - 장소와 관련된 표현에서 장소 키워드와 감정(positive/negative/neutral) 추출\n\n"
-        f"날짜는 현재 날짜({current_date_str}) 기준으로 계산:\n"
-        f"- '다음 주 목요일' → {next_thursday_str}\n"
-        "- '6일' → 현재 월의 6일\n"
-        "- '다음 주'는 현재 날짜로부터 7일 이후의 주를 의미\n\n"
-        "결과는 다음 JSON 형식으로 반환:\n"
+        f"오늘은 {today.year}년 {today.month}월 {today.day}일입니다.\n"
+        "아래 대화를 분석하여 약속 시간과 장소를 찾아주세요.\n\n"
+        "주의사항:\n"
+        "1. 반드시 JSON 형식으로만 응답하세요.\n"
+        "2. 다른 설명이나 텍스트는 절대 포함하지 마세요.\n"
+        "3. 모든 참여자가 가능한 공통 시간을 반드시 찾아내세요.\n"
+        "4. 시간이 구체적으로 언급되지 않은 경우 오후 5시(17:00)를 사용하세요.\n\n"
+        
+        "시간 분석 규칙:\n"
+        "1. 시간 표현:\n"
+        "- '다음 주' → 오늘 기준 다음 주의 날짜\n"
+        "- '다다음 주' → 오늘 기준 2주 후의 주\n"
+        "- '이번 주' → 현재 주간\n"
+        "- 'N주 뒤' → N주 후\n"
+        "- '8월 둘째 주' → 8월 두 번째 주 시작일 기준\n\n"
+        
+        "2. 시간대 변환:\n"
+        "- '오전' = 10:00\n"
+        "- '점심' = 12:00\n"
+        "- '오후' = 17:00\n"
+        "- '저녁' = 18:00\n\n"
+        
+        "3. 장소 분석:\n"
+        "- 긍정적 표현: '좋다', '괜찮다', '좋아' 등\n"
+        "- 부정적 표현: '싫다', '별로', '극혐' 등\n\n"
+        
+        "아래 형식의 JSON으로만 응답하세요:\n"
         "{\n"
-        "  \"available_times\": [\"목요일 18:30\"],\n"
-        "  \"max_attend_time\": {\n"
-        "    \"time\": \"목요일 18:30\",\n"
-        "    \"absent_members\": [\"재현\"],\n"
-        "    \"reason\": \"18:30 이전에 나가야 함\"\n"
-        "  },\n"
+        "  \"available_times\": [\"목요일 17:00\", \"금요일 17:00\"],\n"
         "  \"locations\": [\n"
-        "    {\"sentence\": \"종로 가자! 결정!\", \"location\": \"종로\", \"sentiment\": \"positive\"}\n"
+        "    {\"sentence\": \"삼각지 좋다\", \"location\": \"삼각지\", \"sentiment\": \"positive\"},\n"
+        "    {\"sentence\": \"홍대 극혐\", \"location\": \"홍대\", \"sentiment\": \"negative\"}\n"
         "  ]\n"
         "}\n\n"
-        "아래는 대화입니다:\n"
+        "대화 내용:\n"
     )
 
     for i, text in enumerate(dialogue_texts, 1):
         prompt += f"{i}. {text}\n"
 
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
+        response = client.chat.completions.create(
+            model=model_name,
             messages=[
-                {"role": "system", "content": f"너는 시간과 장소를 분석하는 전문가야. 현재 날짜는 {current_date_str}이야. '다음 주'는 현재 날짜로부터 7일 이후의 주를 의미해. 예를 들어, 현재가 {current_date_str}이면 '다음 주 목요일'은 {next_thursday_str}이야. 시간은 반드시 최종 결정된 시간을 추출하고, 시간 제약조건은 무시해. 여러 시간이 언급되면 가장 최근에 결정된 시간을 사용해. 모든 인원이 가능한 시간이 없으면 최대 인원이 가능한 시간을 추천하고, 그 시간에 불참하는 사람과 이유도 함께 알려줘. 시간은 24시간 형식으로 변환하고, 날짜는 현재 날짜를 기준으로 계산해."},
+                {"role": "system", "content": "너는 JSON 응답 전문가야. 어떤 상황에서도 반드시 순수한 JSON 형식으로만 응답해야 하며, 다른 설명이나 텍스트는 절대 포함하지 마. 분석 결과는 available_times와 locations 키를 가진 JSON 객체로만 반환해야 해. 절대로 다른 형식이나 설명을 포함하지 마."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.2
+            temperature=0.1
         )
-        output_text = response["choices"][0]["message"]["content"]
+        output_text = response.choices[0].message.content.strip()
         
+        # JSON 형식이 아닌 텍스트 제거
         try:
+            # JSON 시작 위치 찾기
+            json_start = output_text.find('{')
+            if json_start != -1:
+                # JSON 끝 위치 찾기
+                json_end = output_text.rfind('}') + 1
+                if json_end > json_start:
+                    output_text = output_text[json_start:json_end]
+            
             result = json.loads(output_text)
-            # 필수 필드 검증
-            required_fields = ["available_times", "locations"]
-            for field in required_fields:
-                if field not in result:
-                    raise GPTAnalysisError(f"GPT 응답에 필수 필드 '{field}'가 없습니다.")
+            if not result.get("available_times"):
+                # 공통 가능한 시간이 비어있으면 대화를 다시 분석
+                response = client.chat.completions.create(
+                    model=model_name,
+                    messages=[
+                        {"role": "system", "content": "너는 JSON 응답 전문가야. 어떤 상황에서도 반드시 순수한 JSON 형식으로만 응답해야 하며, 다른 설명이나 텍스트는 절대 포함하지 마. 특히 모든 참여자가 가능한 공통 시간을 반드시 찾아내야 해."},
+                        {"role": "user", "content": prompt + "\n\n주의: 대화를 다시 한번 자세히 분석해서 공통으로 가능한 시간을 반드시 찾아주세요. JSON 형식으로만 응답하세요."}
+                    ],
+                    temperature=0.1
+                )
+                output_text = response.choices[0].message.content.strip()
+                result = json.loads(output_text)
             return result
-        except json.JSONDecodeError as e:
-            raise GPTAnalysisError(f"GPT 응답을 JSON으로 파싱할 수 없습니다: {str(e)}")
+        except json.JSONDecodeError:
+            print("⚠️ GPT 응답이 JSON 형식이 아닙니다. 응답 내용:\n", output_text)
+            return {"available_times": [], "locations": []}
 
-    except openai.error.AuthenticationError:
-        raise GPTAnalysisError("OpenAI API 인증에 실패했습니다. API 키를 확인해주세요.")
-    except openai.error.RateLimitError:
-        raise GPTAnalysisError("OpenAI API 호출 한도를 초과했습니다. 잠시 후 다시 시도해주세요.")
-    except openai.error.APIError as e:
-        raise GPTAnalysisError(f"OpenAI API 호출 중 오류가 발생했습니다: {str(e)}")
     except Exception as e:
-        raise GPTAnalysisError(f"예상치 못한 오류가 발생했습니다: {str(e)}")
+        print("❌ GPT API 호출 실패:", e)
+        return {"available_times": [], "locations": []}
