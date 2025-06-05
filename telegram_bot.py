@@ -88,6 +88,13 @@ async def analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
     time_strings = []
 
     for t in times:
+        # 전체 날짜와 시간이 포함된 형식 (예: "2025년 6월 13일 금요일 18:30")
+        full_datetime_match = re.match(r"(\d{4})년\s+(\d{1,2})월\s+(\d{1,2})일\s+(\S+요일)\s+(\d{1,2}):(\d{2})", t)
+        if full_datetime_match:
+            time_strings.append(f"- {t}")
+            continue
+            
+        # 요일과 시간이 포함된 형식 (예: "금요일 18:30")
         m = re.match(r"(\S+)\s+(\d{1,2}):(\d{2})", t)
         if m:
             weekday = m[1]
@@ -96,10 +103,27 @@ async def analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
             date_str = resolve_date_with_weekday(weekday, reference_date)
             time_strings.append(f"- {date_str} {hour}:{minute}")
         else:
+            # 요일만 있는 경우
             for wd in weekdays:
                 if wd in t:
                     date_str = resolve_date_with_weekday(wd, reference_date)
-                    time_strings.append(f"- {date_str}")
+                    # 시간이 없는 경우 마지막 대화에서 시간을 찾아봄
+                    time_found = False
+                    for msg in reversed(conv):
+                        time_match = re.search(r"(\d{1,2})시\s*반?|\d{1,2}:\d{2}", msg["text"])
+                        if time_match:
+                            time_str = time_match.group()
+                            if "반" in time_str:
+                                hour = int(time_str.replace("시", "").replace("반", ""))
+                                time_str = f"{hour:02d}:30"
+                            elif "시" in time_str:
+                                hour = int(time_str.replace("시", ""))
+                                time_str = f"{hour:02d}:00"
+                            time_found = True
+                            time_strings.append(f"- {date_str} {time_str}")
+                            break
+                    if not time_found:
+                        time_strings.append(f"- {date_str} 17:00")  # 기본값
                     break
 
     if time_strings:
